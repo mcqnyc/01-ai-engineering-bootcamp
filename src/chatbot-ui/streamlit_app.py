@@ -2,11 +2,23 @@ import streamlit as st
 from openai import OpenAI
 from groq import Groq
 from google import genai
+from google.genai import types
+
 
 from core.config import config
 
 with st.sidebar:
     st.title("Settings")
+
+    temperature = st.slider("Temperature", 0.0, 2.0)
+    st.session_state.temperature = temperature
+    
+    st.write("----------")
+
+    max_tokens = st.number_input("Max Tokens (up to 500)", 100, 500)
+    st.session_state.max_tokens = max_tokens
+
+    st.write("----------")
 
     #Dropdown for model
     provider = st.selectbox("Provider", ["OpenAI", "Groq", "Google"])
@@ -30,17 +42,22 @@ else:
     client = genai.Client(api_key=config.GOOGLE_API_KEY)
 
 
-def run_llm(client, messages, max_tokens=500):
+def run_llm(client, messages, temperature, max_tokens):
     if st.session_state.provider == "Google":
         return client.models.generate_content(
             model=st.session_state.model_name,
             contents=[message["content"] for message in messages],
+            config=types.GenerateContentConfig(
+                temperature=temperature,
+                maxOutputTokens=max_tokens
+            )
         ).text
     else:
         return client.chat.completions.create(
             model=st.session_state.model_name,
             messages=messages,
-            max_tokens=max_tokens
+            temperature=temperature,
+            max_completion_tokens=max_tokens
         ).choices[0].message.content
 
 
@@ -57,6 +74,7 @@ if prompt := st.chat_input("Hello! How can I assist you today?"):
         st.markdown(prompt)
 
     with st.chat_message("assistant"):
-        output = run_llm(client, st.session_state.messages)
+        output = run_llm(client, st.session_state.messages, st.session_state.temperature, 
+                         st.session_state.max_tokens)
         st.write(output)
     st.session_state.messages.append({"role": "assistant", "content": output})
