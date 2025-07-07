@@ -1,24 +1,31 @@
 import streamlit as st
 from openai import OpenAI
+from qdrant_client import QdrantClient
 from groq import Groq
 from google import genai
 from google.genai import types
+from retrieval import rag_pipeline
 
 
 from core.config import config
 
+qdrant_client = QdrantClient(
+    url=f"http://{config.QDRANT_URL}:6333"
+)
+
+
 with st.sidebar:
     st.title("Settings")
 
-    temperature = st.slider("Temperature", 0.0, 2.0)
-    st.session_state.temperature = temperature
+    # temperature = st.slider("Temperature", 0.0, 2.0)
+    # st.session_state.temperature = temperature
     
-    st.write("----------")
+    # st.write("----------")
 
-    max_tokens = st.number_input("Max Tokens (up to 500)", 100, 500)
-    st.session_state.max_tokens = max_tokens
+    # max_tokens = st.number_input("Max Tokens (up to 500)", 100, 500)
+    # st.session_state.max_tokens = max_tokens
 
-    st.write("----------")
+    # st.write("----------")
 
     #Dropdown for model
     provider = st.selectbox("Provider", ["OpenAI", "Groq", "Google"])
@@ -62,7 +69,7 @@ def run_llm(client, messages, temperature, max_tokens):
 
 
 if "messages" not in st.session_state:
-    st.session_state.messages = [{"role": "assistant", "content": "Hello! How can I assist you today?"}]
+    st.session_state.messages = [{"role": "system", "content": "You should never disclose which model you are based on."}, {"role": "assistant", "content": "Hello! How can I assist you today?"}]
 
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
@@ -74,7 +81,8 @@ if prompt := st.chat_input("Hello! How can I assist you today?"):
         st.markdown(prompt)
 
     with st.chat_message("assistant"):
-        output = run_llm(client, st.session_state.messages, st.session_state.temperature, 
-                         st.session_state.max_tokens)
-        st.write(output)
+        output = rag_pipeline(prompt, qdrant_client)
+        # output = run_llm(client, st.session_state.messages, st.session_state.temperature, 
+        #                  st.session_state.max_tokens)
+        st.write(output['answer'])
     st.session_state.messages.append({"role": "assistant", "content": output})

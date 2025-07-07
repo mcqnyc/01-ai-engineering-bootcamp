@@ -9,3 +9,10 @@ run-docker-streamlit:
 
 clean-notebook-outputs:
 	jupyter nbconvert --clear-output --inplace notebooks/*.ipynb
+
+run-docker-compose:
+	docker compose -f docker-compose.yml up --build
+
+run-evals:
+	uv sync
+	PYTHONPATH=${PWD}/src:$$PYTHONPATH:${PWD} uv run --env-file .env python -m evals.eval_retriever
