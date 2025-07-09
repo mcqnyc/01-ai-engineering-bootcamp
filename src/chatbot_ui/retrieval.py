@@ -1,9 +1,14 @@
 import openai
+import instructor
+from openai import OpenAI
+from pydantic import BaseModel
 
 from qdrant_client import QdrantClient
+from qdrant_client.models import Filter, Prefetch, FieldCondition, MatchText, FusionQuery
+
 from langsmith import traceable, get_current_run_tree
 
-from chatbot_ui.core.config import config
+from core.config import config
 
 
 @traceable(
@@ -36,9 +41,27 @@ def get_embedding(text, model=config.EMBEDDING_MODEL):
 )
 def retrieve_context(query, qdrant_client, top_k=5):
     query_embedding = get_embedding(query)
-    results = qdrant_client.search(
-        collection_name=config.QDRANT_COLLECTION_NAME,
-        query_vector=query_embedding,
+    
+    results = qdrant_client.query_points(
+        collection_name="Amazon-items-collection-01-hybrid",
+        prefetch=[
+            Prefetch(
+                query=query_embedding,
+                limit=20,
+            ),
+            Prefetch(
+                filter=Filter(
+                    must=[
+                        FieldCondition(
+                            key="text",
+                            match=MatchText(text=query)
+                        )
+                    ]
+                ),
+                limit=20
+            )
+        ],
+        query=FusionQuery(fusion="rrf"),
         limit=top_k
     )
 
@@ -46,7 +69,7 @@ def retrieve_context(query, qdrant_client, top_k=5):
     retrieved_context = []
     similarity_scores = []
 
-    for result in results:
+    for result in results.points:
         retrieved_context_ids.append(result.id)
         retrieved_context.append(result.payload['text'])
         similarity_scores.append(result.score)
@@ -97,6 +120,11 @@ Question:
     return prompt
 
 
+
+class RAGGenerationResponse(BaseModel):
+    answer: str
+
+
 @traceable(
     name="generate_answer",
     run_type="llm",
@@ -106,23 +134,24 @@ Question:
     }
 )
 def generate_answer(prompt):
-    response = openai.chat.completions.create(
+    client = instructor.from_openai(OpenAI(api_key=config.OPENAI_API_KEY))
+
+    response, raw_response = client.chat.completions.create_with_completion(
         model="gpt-4.1",
-        messages=[
-            {"role": "user", "content": prompt}
-        ],
-        temperature=0.5,
+        response_model=RAGGenerationResponse,
+        messages=[{"role": "user", "content": prompt}],
+        temperature=0.5
     )
 
     current_run = get_current_run_tree()
     if current_run:
         current_run.metadata["usage_metadata"] = {
-            "input_tokens": response.usage.prompt_tokens,
-            "total_tokens": response.usage.total_tokens,
-            "output_tokens": response.usage.completion_tokens,
+            "input_tokens": raw_response.usage.prompt_tokens,
+            "total_tokens": raw_response.usage.total_tokens,
+            "output_tokens": raw_response.usage.completion_tokens,
         }
         
-    return response.choices[0].message.content.strip()
+    return response
 
 
 @traceable(

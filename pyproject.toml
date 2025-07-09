@@ -15,5 +15,7 @@ dependencies = [
     "langsmith",
     "langchain-openai",
     "ragas",
-    "rapidfuzz"
+    "rapidfuzz",
+    "ipykernel",
+    "instructor"
 ]
