@@ -1,88 +1,106 @@
 import streamlit as st
-from openai import OpenAI
-from qdrant_client import QdrantClient
-from groq import Groq
-from google import genai
-from google.genai import types
-from retrieval import rag_pipeline
+import requests
 
+from src.chatbot_ui.core.config import settings
 
-from core.config import config
-
-qdrant_client = QdrantClient(
-    url=f"http://{config.QDRANT_URL}:6333"
+st.set_page_config(
+    page_title="Ecommerce Assistant",
+    layout="wide",
+    initial_sidebar_state="expanded",
 )
 
 
-with st.sidebar:
-    st.title("Settings")
+def api_call(method, url, **kwargs):
 
-    # temperature = st.slider("Temperature", 0.0, 2.0)
-    # st.session_state.temperature = temperature
-    
-    # st.write("----------")
+    def _show_error_popup(message):
+        """Show error message as a popup in the top-right corner."""
+        st.session_state["error_popup"] = {
+            "visible": True,
+            "message": message,
+        }
 
-    # max_tokens = st.number_input("Max Tokens (up to 500)", 100, 500)
-    # st.session_state.max_tokens = max_tokens
+    try:
+        response = getattr(requests, method)(url, **kwargs)
 
-    # st.write("----------")
+        try:
+            response_data = response.json()
+        except requests.exceptions.JSONDecodeError:
+            response_data = {"message": "Invalid response format from server"}
 
-    #Dropdown for model
-    provider = st.selectbox("Provider", ["OpenAI", "Groq", "Google"])
-    if provider == "OpenAI":
-        model_name = st.selectbox("Model", ["gpt-4o-mini", "gpt-4o"])
-    elif provider == "Groq":
-        model_name = st.selectbox("Model", ["llama-3.3-70b-versatile"])
-    else:
-        model_name = st.selectbox("Model", ["gemini-2.0-flash"])
+        if response.ok:
+            return True, response_data
 
-    # Save provider and model to session state
-    st.session_state.provider = provider
-    st.session_state.model_name = model_name
+        return False, response_data
 
-
-if st.session_state.provider == "OpenAI":
-    client = OpenAI(api_key=config.OPENAI_API_KEY)
-elif st.session_state.provider == "Groq":
-    client = Groq(api_key=config.GROQ_API_KEY)
-else:
-    client = genai.Client(api_key=config.GOOGLE_API_KEY)
+    except requests.exceptions.ConnectionError:
+        _show_error_popup("Connection error. Please check your network connection.")
+        return False, {"message": "Connection error"}
+    except requests.exceptions.Timeout:
+        _show_error_popup("The request timed out. Please try again later.")
+        return False, {"message": "Request timeout"}
+    except Exception as e:
+        _show_error_popup(f"An unexpected error occurred: {str(e)}")
+        return False, {"message": str(e)}
 
 
-def run_llm(client, messages, temperature, max_tokens):
-    if st.session_state.provider == "Google":
-        return client.models.generate_content(
-            model=st.session_state.model_name,
-            contents=[message["content"] for message in messages],
-            config=types.GenerateContentConfig(
-                temperature=temperature,
-                maxOutputTokens=max_tokens
-            )
-        ).text
-    else:
-        return client.chat.completions.create(
-            model=st.session_state.model_name,
-            messages=messages,
-            temperature=temperature,
-            max_completion_tokens=max_tokens
-        ).choices[0].message.content
-
+if "retrieved_items" not in st.session_state:
+    st.session_state.retrieved_items = []
 
 if "messages" not in st.session_state:
-    st.session_state.messages = [{"role": "system", "content": "You should never disclose which model you are based on."}, {"role": "assistant", "content": "Hello! How can I assist you today?"}]
+    st.session_state.messages = [{"role": "assistant", "content": "Hello! How can I assist you today?"}]
 
+if "query_counter" not in st.session_state:
+    st.session_state.query_counter = 0
+
+if "sidebar_key" not in st.session_state:
+    st.session_state.sidebar_key = 0
+
+if "sidebar_placeholder" not in st.session_state:
+    st.session_state.sidebar_placeholder = None
+
+# Sidebar - Suggestions
+with st.sidebar:
+    st.markdown("### Suggestions")
+    
+    # Create or get the placeholder
+    if st.session_state.sidebar_placeholder is None:
+        st.session_state.sidebar_placeholder = st.empty()
+    
+    # Clear and rebuild the suggestions
+    with st.session_state.sidebar_placeholder.container():
+        if st.session_state.retrieved_items:
+            for idx, item in enumerate(st.session_state.retrieved_items):
+                st.divider()
+                st.caption(item.get('description', 'No description'))
+                if 'image_url' in item:
+                    st.image(item["image_url"], width=300)
+                st.caption(f"Price: {item['price']} USD")
+        else:
+            st.info("No suggestions yet")
+
+# Main content - Chat interface
+
+# Display all messages
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
 
+# Chat input
 if prompt := st.chat_input("Hello! How can I assist you today?"):
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
         st.markdown(prompt)
-
-    with st.chat_message("assistant"):
-        output = rag_pipeline(prompt, qdrant_client)
-        # output = run_llm(client, st.session_state.messages, st.session_state.temperature, 
-        #                  st.session_state.max_tokens)
-        st.write(output['answer'])
-    st.session_state.messages.append({"role": "assistant", "content": output})
+    
+    with st.spinner("Thinking..."):
+        status, output = api_call("post", f"{settings.API_URL}/rag", json={"query": prompt})
+        # Update retrieved items
+        st.session_state.retrieved_items = output.get("used_image_urls", [])
+        
+        # Clear the sidebar placeholder to force refresh
+        if st.session_state.sidebar_placeholder is not None:
+            st.session_state.sidebar_placeholder.empty()
+        
+        response_content = output.get("answer", str(output))
+    
+    st.session_state.messages.append({"role": "assistant", "content": response_content})
+    st.rerun()

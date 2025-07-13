@@ -2,13 +2,16 @@ import openai
 import instructor
 from openai import OpenAI
 from pydantic import BaseModel
+from typing import List
+import json
 
 from qdrant_client import QdrantClient
 from qdrant_client.models import Filter, Prefetch, FieldCondition, MatchText, FusionQuery
 
 from langsmith import traceable, get_current_run_tree
 
-from core.config import config
+from api.core.config import config
+from api.rag.utils.utils import prompt_template_config, prompt_template_registry
 
 
 @traceable(
@@ -88,11 +91,37 @@ def retrieve_context(query, qdrant_client, top_k=5):
 def process_context(context):
     formatted_context = ""
 
-    for chunk in context['retrieved_context']:
-        formatted_context += f"- {chunk}\n"
+    for id, chunk in zip(context['retrieved_context_ids'], context['retrieved_context']):
+        formatted_context += f"{id}: {chunk}\n"
 
     return formatted_context
 
+
+OUTPUT_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "answer": {
+            "type": "string",
+            "description": "The answer to the question based on the provided context.",
+        },
+        "retrieved_context_ids": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "integer",
+                        "description": "The index of the chunk that was used to answer the question.",
+                    },
+                    "description": {
+                        "type": "string",
+                        "description": "Short description of the item based on the context together with the id.",
+                    },
+                },
+            },
+        },
+    },
+}
 
 @traceable(
     name="render_prompt",
@@ -101,28 +130,24 @@ def process_context(context):
 def build_prompt(context, question):
     processed_context = process_context(context)
 
-    prompt = f"""
-You are a shopping assistant that can answer questions about the products in stock.
+    # prompt_template = prompt_template_config(config.RAG_PROMPT_TEMPLATE_PATH, "rag_generation")
+    prompt_template = prompt_template_registry("rag-prompt")
 
-You will be given a question and a list of context.
-
-Instructions:
-- You need to answer the question based on the provided context only.
-- Never use word context and refer to it as the available products.
-
-Context:
-{processed_context}
-
-Question:
-{question}
-"""
+    prompt = prompt_template.render(
+        question=question,
+        processed_context=processed_context,
+        output_json_schema=json.dumps(OUTPUT_SCHEMA, indent=2))
 
     return prompt
 
 
+class RAGUsedContext(BaseModel):
+    id: int
+    description: str
 
 class RAGGenerationResponse(BaseModel):
     answer: str
+    retrieved_context_ids: List[RAGUsedContext]
 
 
 @traceable(
@@ -172,3 +197,27 @@ def rag_pipeline(question, qdrant_client, top_k=5):
     }
 
     return final_result
+
+
+def rag_pipeline_wrapper(question, top_k=5):
+    qdrant_client = QdrantClient(
+        url=config.QDRANT_URL,
+    )
+
+    result = rag_pipeline(question, qdrant_client, top_k)
+
+    image_url_list = []
+    for id in result["answer"].retrieved_context_ids:
+        payload = qdrant_client.retrieve(
+            collection_name=config.QDRANT_COLLECTION_NAME,
+            ids=[id.id]
+        )[0].payload
+        image_url = payload.get("first_large_image")
+        price = payload.get("price")
+        if image_url:
+            image_url_list.append({"image_url": image_url, "price": price, "description": id.description})
+
+    return {
+        "answer": result["answer"].answer,
+        "retrieved_images": image_url_list,
+    }

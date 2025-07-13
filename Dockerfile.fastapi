@@ -18,10 +18,10 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen
 
 # Copy application code
-COPY src/chatbot-ui ./src/chatbot-ui/
+COPY src/api ./src/api/
 
 # Pre-compile Python files to bytecode
-RUN python -m compileall ./src/chatbot-ui
+RUN python -m compileall ./src/api
 
 # Set PATH to use the virtual environment
 ENV PATH="/app/.venv/bin:$PATH"
@@ -34,8 +34,8 @@ RUN addgroup --system app && \
 # Switch to non-root user
 USER app
 
-# Expose the Streamlit port
-EXPOSE 8501
+# Expose the FastAPI port
+EXPOSE 8000
 
 # Command to run the application
-CMD ["streamlit", "run", "src/chatbot-ui/streamlit_app.py", "--server.address=0.0.0.0"]
+CMD ["uvicorn", "src.api.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
