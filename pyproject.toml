@@ -17,5 +17,8 @@ dependencies = [
     "ragas",
     "rapidfuzz",
     "ipykernel",
-    "instructor"
+    "instructor",
+    "fastapi",
+    "uvicorn",
+    "httpx"
 ]
