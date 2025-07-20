@@ -20,5 +20,10 @@ dependencies = [
     "instructor",
     "fastapi",
     "uvicorn",
-    "httpx"
+    "httpx",
+    "langgraph",
+    "langgraph-prebuilt",
+    "langgraph-checkpoint-postgres",
+    "psycopg2-binary",
+    "psycopg[binary]"
 ]

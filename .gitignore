@@ -1,6 +1,7 @@
 # project files
 data/
 qdrant_storage/
+postgres_data/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
