@@ -8,7 +8,8 @@ class Config(BaseSettings):
     GOOGLE_API_KEY: str
     GROQ_API_KEY: str
     QDRANT_URL: str
-    QDRANT_COLLECTION_NAME: str
+    QDRANT_COLLECTION_NAME_ITEMS: str = "Amazon-items-collection-02-items"
+    QDRANT_COLLECTION_NAME_REVIEWS: str = "Amazon-items-collection-02-reviews"
     EMBEDDING_MODEL: str
     EMBEDDING_MODEL_PROVIDER: str
     GENERATION_MODEL: str
