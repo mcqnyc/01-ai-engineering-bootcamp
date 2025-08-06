@@ -1,6 +1,7 @@
 import yaml
 from jinja2 import Template
 from langsmith import Client
+from fastmcp import Client as FastMCPClient
 from typing import Dict, Any
 import ast
 import inspect
@@ -167,6 +168,84 @@ def get_tool_descriptions_from_node(tool_node):
                 descriptions.append(result)
     
     return descriptions if descriptions else "Could not extract tool descriptions"
+
+
+### Tool descriptions from MCP servers ###
+
+async def get_tool_descriptions_from_mcp_servers(mcp_servers: list[str]) -> list[dict]:
+
+    tool_descriptions = []
+
+    for server in mcp_servers:
+
+        client = FastMCPClient(server)
+
+        async with client:
+
+            tools = await client.list_tools()
+
+            for tool in tools:
+                
+                result = {
+                    "name": "",
+                    "description": "",
+                    "parameters": {"type": "object", "properties": {}},
+                    "required": [],
+                    "returns": {"type": "string", "description": ""},
+                    "server": server
+                }
+
+                result["name"] = tool.name
+                result["required"] = tool.inputSchema.get("required", [])
+
+                ## Get Description
+
+                description = tool.description.split("\n\n")[0]
+                result["description"] = description
+
+
+                ## Get Returns
+
+                returns = tool.description.split("Returns:")[1].strip()
+                result["returns"]["description"] = returns
+
+                ## Get parameters
+
+                property_descriptions = parse_docstring_params(tool.description)
+                properties = tool.inputSchema.get("properties", {})
+                for key, value in properties.items():
+                    properties[key]["description"] = property_descriptions.get(key, "")
+
+                result["parameters"]["properties"] = properties
+
+                tool_descriptions.append(result)
+
+    return tool_descriptions
+
+
+#### MCP TOOL NODE ####
+async def mcp_tool_node(state) -> str:
+
+    tool_messages = []
+
+    for i, tc in enumerate(state.tool_calls):
+
+        client = FastMCPClient(tc.server)
+
+        async with client:
+
+            result = await client.call_tool(tc.name, tc.arguments)
+
+            tool_message = ToolMessage(
+                content=result,
+                tool_call_id=f"call_{i}"
+            )
+
+            tool_messages.append(tool_message)
+
+    return {
+        "messages": tool_messages
+    }
 
 
 #### MESSAGE TRANSFORMATIONS ####
