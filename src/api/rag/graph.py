@@ -2,7 +2,7 @@ from pydantic import BaseModel, Field
 from operator import add
 from typing import Dict, Any, Annotated, List, Optional
 
-from api.rag.agent import ToolCall, RAGUsedContext, agent_node
+from api.rag.agents import ToolCall, RAGUsedContext, intent_router_agent_node, product_qa_agent_node
 from api.rag.utils.utils import mcp_tool_node, get_tool_descriptions_from_mcp_servers
 from api.core.config import config
 
@@ -24,8 +24,10 @@ class State(BaseModel):
     tool_calls: Optional[List[ToolCall]] = Field(default_factory=list)
     retrieved_context_ids: List[RAGUsedContext] = []
     trace_id: str = ""
+    user_intent: str = ""
 
 
+### ROUTERS ###
 def tool_router(state: State) -> str:
     """Decide whether to continue or end"""
     
@@ -39,17 +41,38 @@ def tool_router(state: State) -> str:
         return "end"
 
 
+def user_intent_router(state: State) -> str:
+    """Decide whether to continue or end"""
+    
+    if state.user_intent == "product_qa":
+        return "product_qa_agent"
+    if state.user_intent == "shopping_cart":
+        return "shopping_cart_agent"
+    else:
+        return "end"
+
+
 ### WORKFLOW ###
 
 workflow = StateGraph(State)
 
-workflow.add_node("agent_node", agent_node)
+workflow.add_edge(START, "intent_router_agent_node")
+
+workflow.add_node("intent_router_agent_node", intent_router_agent_node)
+workflow.add_node("product_qa_agent_node", product_qa_agent_node)
 workflow.add_node("mcp_tool_node", mcp_tool_node)
 
-workflow.add_edge(START, "agent_node")
+workflow.add_conditional_edges(
+    "intent_router_agent_node",
+    user_intent_router,
+    {
+        "product_qa_agent": "product_qa_agent_node",
+        "end": END
+    }
+)
 
 workflow.add_conditional_edges(
-    "agent_node",
+    "product_qa_agent_node",
     tool_router,
     {
         "tools": "mcp_tool_node",
@@ -57,7 +80,7 @@ workflow.add_conditional_edges(
     }
 )
 
-workflow.add_edge("mcp_tool_node", "agent_node")
+workflow.add_edge("mcp_tool_node", "product_qa_agent_node")
 
 
 async def run_agent(question: str, thread_id: str):
@@ -91,7 +114,7 @@ async def run_agent_wrapper(question: str, thread_id: str):
 
     image_url_list = []
     dummy_vector = np.zeros(1536).tolist()
-    for id in result.get("retrieved_context_ids"):
+    for id in result.get("retrieved_context_ids", []):
         payload = qdrant_client.query_points(
             collection_name=config.QDRANT_COLLECTION_NAME_ITEMS,
             query=dummy_vector,
