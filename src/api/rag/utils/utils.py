@@ -33,6 +33,30 @@ def prompt_template_registry(prompt_name):
     return template
 
 
+### FORMAT AI MESSAGE ###
+def format_ai_message(response):
+
+    if response.tool_calls and not response.final_answer:
+        tool_calls = []
+        for i, tc in enumerate(response.tool_calls):
+            tool_calls.append({
+                "id": f"call_{i}",
+                "name": tc.name,
+                "args": tc.arguments
+            })
+
+        ai_message = AIMessage(
+            content=response.answer,
+            tool_calls=tool_calls
+            )
+    else:
+        ai_message = AIMessage(
+            content=response.answer,
+        )
+    
+    return ai_message
+
+
 ###### TOOL DESCRIPTION PARSING ######
 def parse_function_definition(function_def: str) -> Dict[str, Any]:
     """Parse a function definition string to extract metadata including type hints."""
@@ -228,7 +252,7 @@ async def mcp_tool_node(state) -> str:
 
     tool_messages = []
 
-    for i, tc in enumerate(state.tool_calls):
+    for i, tc in enumerate(state.mcp_tool_calls):
 
         client = FastMCPClient(tc.server)
 
