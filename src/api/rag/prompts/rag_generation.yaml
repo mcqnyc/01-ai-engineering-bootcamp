@@ -36,7 +36,7 @@ prompts:
 
         After the tools are used you will get the outputs from the tools.
 
-        Use names specificly provided in the available tools. Don't add any additional text to the names.
+        Use names specifically provided in the available tools. Don't add any additional text to the names.
 
         If you set final_answer to True, you should not use any tools.
 
@@ -115,7 +115,7 @@ prompts:
         - Cart ID: {{ cart_id }}
 
         Instructions:
-        - Use names specificly provided in the available tools. Don't add any additional text to the names.
+        - Use names specifically provided in the available tools. Don't add any additional text to the names.
         - You can run multipple tools at once.
         - Once you get the tool results back, you might choose to performa additional tool calls.
         - Once your suggested tool calls are done, set final_answer to True.

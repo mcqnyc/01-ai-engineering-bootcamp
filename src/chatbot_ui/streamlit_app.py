@@ -77,8 +77,14 @@ def submit_feedback(feedback_type=None, feedback_text=""):
     status, response = api_call("post", f"{settings.API_URL}/submit_feedback", json=feedback_data)
     return status, response
 
+
+
+# Initialize session state variables
 if "retrieved_items" not in st.session_state:
     st.session_state.retrieved_items = []
+
+if "shopping_cart" not in st.session_state:
+    st.session_state.shopping_cart = []
 
 if "messages" not in st.session_state:
     st.session_state.messages = [{"role": "assistant", "content": "Hello! How can I assist you today?"}]
@@ -105,25 +111,37 @@ if "feedback_submission_status" not in st.session_state:
 if "trace_id" not in st.session_state:
     st.session_state.trace_id = None
 
-# Sidebar - Suggestions
+# Sidebar with Tabs
 with st.sidebar:
-    st.markdown("### Suggestions")
+    # Create tabs in the sidebar
+    suggestions_tab, cart_tab = st.tabs(["🔍 Suggestions", "🛒 Shopping Cart"])
     
-    # Create or get the placeholder
-    if st.session_state.sidebar_placeholder is None:
-        st.session_state.sidebar_placeholder = st.empty()
-    
-    # Clear and rebuild the suggestions
-    with st.session_state.sidebar_placeholder.container():
+    # Suggestions Tab
+    with suggestions_tab:
         if st.session_state.retrieved_items:
             for idx, item in enumerate(st.session_state.retrieved_items):
-                st.divider()
                 st.caption(item.get('description', 'No description'))
                 if 'image_url' in item:
-                    st.image(item["image_url"], width=300)
+                    st.image(item["image_url"], width=250)
                 st.caption(f"Price: {item['price']} USD")
+                st.divider()
         else:
             st.info("No suggestions yet")
+    
+    # Shopping Cart Tab
+    with cart_tab:
+        if st.session_state.shopping_cart:
+            
+            for idx, item in enumerate(st.session_state.shopping_cart):
+                st.caption(item.get('description', 'No description'))
+                if 'product_image_url' in item:
+                    st.image(item["product_image_url"], width=250)
+                st.caption(f"Price: {item['price']} {item['currency']}")
+                st.caption(f"Quantity: {item['quantity']}")
+                st.caption(f"Total price: {item['total_price']} {item['currency']}")
+                st.divider()
+        else:
+            st.info("Your cart is empty")
 
 # Main content - Chat interface
 
@@ -216,12 +234,10 @@ if prompt := st.chat_input("Hello! How can I assist you today?"):
     
     with st.spinner("Thinking..."):
         status, output = api_call("post", f"{settings.API_URL}/rag", json={"query": prompt, "thread_id": session_id})
-        # Update retrieved items
+        # Update retrieved items and shopping cart
         st.session_state.retrieved_items = output.get("used_image_urls", [])
+        st.session_state.shopping_cart = output.get("shopping_cart", [])
         st.session_state.trace_id = output.get("trace_id", None)
-        # Clear the sidebar placeholder to force refresh
-        if st.session_state.sidebar_placeholder is not None:
-            st.session_state.sidebar_placeholder.empty()
         
         response_content = output.get("answer", str(output))
     

@@ -4,7 +4,7 @@ import logging
 from api.rag.graph import run_agent_wrapper
 from api.api.processors.submit_feedback import submit_feedback
 
-from api.api.models import RAGRequest, RAGResponse, RAGUsedImage, FeedbackResponse, FeedbackRequest
+from api.api.models import RAGRequest, RAGResponse, RAGUsedImage, FeedbackResponse, FeedbackRequest, ShoppingCartItem
 
 logger = logging.getLogger(__name__)
 
@@ -18,17 +18,30 @@ async def rag(
 ) -> RAGResponse:
 
     result = await run_agent_wrapper(payload.query, payload.thread_id)
+
     used_image_urls = [RAGUsedImage(
         image_url=image["image_url"],
         price=image["price"],
         description=image["description"]
     ) for image in result["retrieved_images"]]
 
+    shopping_cart = [
+        ShoppingCartItem(
+            price=item["price"],
+            quantity=item["quantity"],
+            currency=item["currency"],
+            product_image_url=item["product_image_url"],
+            total_price=item["total_price"]
+        )
+        for item in result["shopping_cart"]
+    ]
+    
     return RAGResponse(
         request_id=request.state.request_id,
         answer=result["answer"],
         used_image_urls=used_image_urls,
-        trace_id=result["trace_id"]
+        trace_id=result["trace_id"],
+        shopping_cart=shopping_cart
     )
 
 
