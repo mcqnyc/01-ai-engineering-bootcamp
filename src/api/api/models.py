@@ -6,10 +6,19 @@ class RAGRequest(BaseModel):
     query: str = Field(..., description="The query to be used in the RAG pipeline.")
     thread_id: str = Field(..., description="The thread ID")
 
+
 class RAGUsedImage(BaseModel):
     image_url: str = Field(..., description="The URL of the image used in the RAG response.")
     price: Optional[float] = Field(..., description="The price of the item.")
     description: str = Field(..., description="A description of the item.")
+
+
+class ShoppingCartItem(BaseModel):
+    price: Optional[float] = Field(..., description="The price of the item")
+    quantity: int = Field(..., description="The quantity of the item")
+    currency: str = Field(..., description="The currency of the item")
+    product_image_url: str = Field(..., description="The URL of the image of the item")
+    total_price: Optional[float] = Field(..., description="The total price of the item")
 
 
 class RAGResponse(BaseModel):
@@ -17,6 +26,7 @@ class RAGResponse(BaseModel):
     answer: str = Field(..., description="The content of the RAG response.")
     used_image_urls: List[RAGUsedImage]
     trace_id: str = Field(..., description="The Trace ID")
+    shopping_cart: List[ShoppingCartItem] = Field(..., description="The shopping cart.")
 
 
 class FeedbackRequest(BaseModel):

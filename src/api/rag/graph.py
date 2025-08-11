@@ -175,8 +175,21 @@ async def run_agent_wrapper(question: str, thread_id: str):
         if image_url:
             image_url_list.append({"image_url": image_url, "price": price, "description": id.description})
 
+        shopping_cart = get_shopping_cart(thread_id, thread_id)
+        shopping_cart_items = [
+            {
+                "price": item.get("price"),
+                "quantity": item.get("quantity"),
+                "currency": item.get("currency"),
+                "product_image_url": item.get("product_image_url"),
+                "total_price": item.get("total_price")
+            } 
+            for item in shopping_cart
+        ]
+
     return {
         "answer": result.get("answer"),
         "retrieved_images": image_url_list,
-        "trace_id": result.get("trace_id")
+        "trace_id": result.get("trace_id"),
+        "shopping_cart": shopping_cart_items
     }
