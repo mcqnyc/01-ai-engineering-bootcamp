@@ -18,7 +18,9 @@ class Config(BaseSettings):
     LANGSMITH_ENDPOINT: str
     LANGSMITH_API_KEY: str
     LANGSMITH_PROJECT: str
-    RAG_PROMPT_TEMPLATE_PATH: str = "src/api/rag/prompts/rag_generation.yaml"
+    COORDINATOR_AGENT_PROMPT_TEMPLATE_PATH: str = "src/api/rag/prompts/coordinator_agent.yaml"
+    PRODUCT_QA_AGENT_PROMPT_TEMPLATE_PATH: str = "src/api/rag/prompts/product_qa_agent.yaml"
+    SHOPPING_CART_AGENT_PROMPT_TEMPLATE_PATH: str = "src/api/rag/prompts/shopping_cart_agent.yaml"
 
     model_config = SettingsConfigDict(env_file='.env')
 
