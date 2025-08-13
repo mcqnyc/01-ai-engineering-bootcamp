@@ -35,8 +35,15 @@ class ProductQAAgentResponse(BaseModel):
     retrieved_context_ids: List[RAGUsedContext]
 
 
-class IntentRouterAgentResponse(BaseModel):
-    user_intent: str
+class Delegation(BaseModel):
+    agent: str
+    task: str = Field(default="")
+
+
+class CoordinatorAgentResponse(BaseModel):
+    next_agent: str
+    plan: list[Delegation]
+    final_answer: bool = Field(default=False)
     answer: str
 
 
@@ -87,23 +94,23 @@ def product_qa_agent_node(state) -> dict:
     return {
         "messages": [ai_message],
         "mcp_tool_calls": response.tool_calls,
-        "iteration": state.product_qa_iteration + 1,
+        "product_qa_iteration": state.product_qa_iteration + 1,
         "answer": response.answer,
-        "final_answer": response.final_answer,
+        "product_qa_final_answer": response.final_answer,
         "retrieved_context_ids": response.retrieved_context_ids,
     }
 
 
-### Intent Router Agent ###
+### Coordinator Agent ###
 
 @traceable(
-    name="intent_router_agent",
+    name="coordinator_agent",
     run_type="llm",
     metadata={"ls_provider": "openai", "ls_model_name": "gpt-4.1"}
 )
-def intent_router_agent_node(state) -> dict:
+def coordinator_agent_node(state) -> dict:
 
-   prompt_template = prompt_template_config(config.RAG_PROMPT_TEMPLATE_PATH, "intent_router_agent")
+   prompt_template = prompt_template_config(config.RAG_PROMPT_TEMPLATE_PATH, "coordinator_agent")
 
    prompt = prompt_template.render()
 
@@ -118,7 +125,7 @@ def intent_router_agent_node(state) -> dict:
 
    response, raw_response = client.chat.completions.create_with_completion(
         model="gpt-4.1",
-        response_model=IntentRouterAgentResponse,
+        response_model=CoordinatorAgentResponse,
         messages=[{"role": "system", "content": prompt}, *conversation],
         temperature=0,
    )
@@ -133,18 +140,20 @@ def intent_router_agent_node(state) -> dict:
         trace_id = str(getattr(current_run, "trace_id", current_run.id))
 
 
-   if response.user_intent == "product_qa":
-
-      ai_message = []
-   else:
+   if response.final_answer:
       ai_message = [AIMessage(
          content=response.answer,
       )]
+   else:
+      ai_message = []
 
    return {
       "messages": ai_message,
       "answer": response.answer,
-      "user_intent": response.user_intent,
+      "next_agent": response.next_agent,
+      "plan": response.plan,
+      "coordinator_final_answer": response.final_answer,
+      "coordinator_iteration": state.coordinator_iteration + 1,
       "trace_id": trace_id,
    }
 
@@ -190,13 +199,13 @@ def shopping_cart_agent_node(state) -> dict:
             "total_tokens": raw_response.usage.total_tokens,
         }
 
-        ai_message = format_ai_message(response)
+    ai_message = format_ai_message(response)
 
     return {
         "messages": [ai_message],
         "tool_calls": response.tool_calls,
         "shopping_cart_iteration": state.shopping_cart_iteration + 1,
         "answer": response.answer,
-        "final_answer": response.final_answer,
+        "shopping_cart_final_answer": response.final_answer,
     }
 

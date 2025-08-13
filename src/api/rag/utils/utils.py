@@ -36,7 +36,11 @@ def prompt_template_registry(prompt_name):
 ### FORMAT AI MESSAGE ###
 def format_ai_message(response):
 
-    if response.tool_calls and not response.final_answer:
+    if response.final_answer:
+        ai_message = AIMessage(
+            content=response.answer,
+        )
+    elif response.tool_calls:
         tool_calls = []
         for i, tc in enumerate(response.tool_calls):
             tool_calls.append({
